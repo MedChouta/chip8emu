@@ -9,9 +9,14 @@
 
 
 int main(int argc, char** argv){
-    int i, j;
-    char screen[64*32] = {" "};
-/*
+    uint8_t i, j;
+    char screen[64][32];
+
+    for(i = 0; i < 32; i++){
+        for(j = 0; j < 64; j++)
+            screen[j][i] = '0';
+    }
+
     SDL_Surface *window;
 
     SDL_Init(SDL_INIT_VIDEO);
@@ -32,27 +37,7 @@ int main(int argc, char** argv){
         return 1;
     }
 
-    SDL_Rect r[64*32] = {0};
-    SDL_Surface *surfRect[64*32] = {0};
-    int j = 0;
-
-    for(i = 0; i < 64*32; i++){
-        if (i % 64 == 0){
-            j++;
-            printf("hh: %d\n", i);
-        }
-        r[i].w = 0;
-        r[i].h = 0;
-        r[i].x = 1280/64 * (i % 64);
-        r[i].y = j * 640/32;
-
-        surfRect[i] = SDL_CreateRGBSurface(SDL_HWSURFACE, 1280/64, 640/32, 32, 0, 0, 0, 0);        
-        //sleep(5);
-
-    }
-    */
-
-    printf("J: %d", j);
+    SDL_Surface *surfRect[64][32] = {NULL};
 
     struct Memory memory; //RAM
 
@@ -103,17 +88,20 @@ int main(int argc, char** argv){
     }
 
     FILE *rom;
-    rom = fopen("ROM.ch8", "rb");
-
+    rom = fopen("test_opcode.ch8", "rb");
+    if(rom != NULL)
+        printf("NON");
     //printf("\nSIZE: %ld\n", sizeof(dump));
-
+    printf("DSLKGHSLKDHGKJSDFGHKJSDHGJK");
 
     uint8_t *dump = (uint8_t*)malloc(MEMSIZE * sizeof(uint8_t));
-
     size_t size = fread(dump, 1, MEMSIZE, rom);
+    //printf("HELLO WORLD\n");
 
+    printf("size: %ld", size);
 
     for(i = 0; i < size; i++){
+      //  printf("HELLO WORLD %d\n", i);
         memory.progSpace[i + memory.PC] = dump[i];
     }
 
@@ -121,9 +109,15 @@ int main(int argc, char** argv){
 
     uint8_t posX, posY = 0;
 
-    int k;
+    uint8_t k;
+    int x, y;
+
+    SDL_Rect pixel;
+
 
     while(1){
+        
+       // SDL_FillRect(window, NULL, SDL_MapRGB(window->format, 0,0,0));
 
         uint16_t instruction = memory.progSpace[memory.PC] << 8 | memory.progSpace[memory.PC + 1];
         uint8_t instructionSplit[4] = {instruction >> 12, (instruction & 0xfff) >> 8, (instruction & 0xff) >> 4, (instruction & 0xf)};
@@ -137,13 +131,18 @@ int main(int argc, char** argv){
         srand((unsigned) time(&t));
         uint8_t randomNumber = rand() % 256;
 
-       printf(" PC: %d | OPCODE: %X \n", memory.PC,instruction);
+       printf("PC: %d | OPCODE: %X \n", memory.PC,instruction);
 
         switch (instruction)
         {
         case 0x00E0:
-            for(i = 0; i < 64*32; i++)
-                screen[i] = '0';
+            for(i = 0; i < 32; i++){
+                for(j = 0; j < 64; j++){
+                    surfRect[j][i] = NULL;
+                }
+
+            }
+            printf("\n");
             memory.PC += 2;
             break;
 
@@ -154,62 +153,253 @@ int main(int argc, char** argv){
             case 0x1: //JP addr
                 memory.PC = instruction & 0xfff;
                 break;
+            case 0x2:
+                memory.SP++;
+                memory.stack[memory.SP - 1] = memory.PC + 2;
+                printf("STACK: %d\n", memory.stack[memory.SP - 1]);
+                memory.PC = instruction & 0xfff;
+                printf("STACK POINTER: %d\n", memory.SP);
+                break;
+
+            case 0x3: //SE Vx, byte
+                if (memory.V[x] == instruction & 0xff)
+                    memory.PC += 4;
+                else
+                    memory.PC += 2;
+                break;
+            
+            case 0x4:
+                if (memory.V[x] != instruction & 0xff)
+                    memory.PC += 4;
+                else
+                    memory.PC += 2;
+                break;
+
+            case 0x5: // SE Vx, Vy
+                if (memory.V[x] == memory.V[y])
+                    memory.PC += 4;
+                else
+                    memory.PC += 2;
+                break;
+
             case 0x6: //LD Vx, byte
                 memory.V[x] = instruction & 0xff;
+                printf("\tREG [V%X]: %X\n\n", x, memory.V[x]);
                 memory.PC += 2;
                 break;
 
             case 0x7:
+                printf("\tREG [V%X] BEFORE: %X\n", x, memory.V[x]);
                 memory.V[x] += instruction & 0xff;
+                printf("\tREG [V%X] AFTER: %X\n\n", x, memory.V[x]);
                 memory.PC += 2;
+                break;
+            case 0x8:
+                switch (instructionSplit[3])
+                {
+                case 0x0: //LD Vx, Vy
+                    memory.V[x] = memory.V[y];
+                    memory.PC += 2;
+                    break;
+
+                case 0x1: //OR Vx, Vy
+                    memory.V[x] = memory.V[x] | memory.V[y];
+                    memory.PC += 2;
+                    break;
+
+                case 0x2: //AND Vx, Vy
+                    memory.V[x] = memory.V[x] & memory.V[y];
+                    memory.PC += 2;
+                    break;
+                
+                case 0x3: //XOR Vx, Vy
+                    memory.V[x] = memory.V[x] ^ memory.V[y];
+                    memory.PC += 2;
+                    break;
+                
+                case 0x4: //ADD Vx, Vy
+                    if (memory.V[x] + memory.V[y] > 255)
+                        memory.V[F] = 1;
+                    else
+                        memory.V[F] = 0;
+                    
+                    memory.V[x] += memory.V[y];
+                    memory.PC += 2;
+
+                    break;
+
+                case 0x5: //Sub Vx, Vy
+                    if (memory.V[x] > memory.V[y])
+                        memory.V[F] = 1;
+                    else
+                        memory.V[F] = 0;
+                    
+                    memory.V[x] -= memory.V[y];
+                    memory.PC += 2;
+                    break;
+                case 0x6: //SHR Vx {, Vy}
+                    memory.V[F] = memory.V[x] & 1;
+                    memory.V[x] >>= 1;
+                    memory.PC += 2;
+                    break;
+                case 0x7: //SUBN Vx, Vy
+                    if (memory.V[y] > memory.V[x])
+                        memory.V[F] = 1;
+                    else
+                        memory.V[F] = 0;
+                    
+                    memory.V[x] = memory.V[y] - memory.V[x];
+                    memory.PC += 2;
+                    break;
+                case 0xE: //SHL Vx {, Vy}
+                    memory.V[F] = memory.V[x] & (1 << 7);
+                    memory.V[x] <<= 1;
+                    memory.PC += 2;
+                    break;
+                }
+                break;
+            case 0x9: //SNE Vx, Vy
+                if (memory.V[x] != memory.V[x])
+                    memory.PC += 4;
+                else
+                    memory.PC += 2;
                 break;
             case 0xA: //LD I, addr
                 memory.I = instruction & 0xfff;
+
+                printf("\tREG [I]: %X\n\n", memory.I);
+
                 memory.PC += 2;
                 break;
-            case 0xD: //DRW Vx, Vy, nibblec
-                x %= 64;
-                y %= 32;
+            case 0xB: //JP V0, addr
+                memory.PC += (instruction & 0xfff) + memory.V[0];
+                memory.PC += 2;
+                break;
+            case 0xC: //RND Vx, byte
+                memory.V[x] = randomNumber & (instruction & 0xfff);
+                memory.PC += 2;
+                break;
+            case 0xD: //DRW Vx, Vy, nibblec                
+                printf("\tREG [V%X]: %d\n\n", x, memory.V[x]);
+                printf("\tREG [V%X]: %d\n\n", y, memory.V[y]);
+                posX = memory.V[x] % 64;
+                posY = memory.V[y] % 32;
                 
+                printf("\t\t (x, y) = (%d, %d)\n", x, y);
+
+
                 memory.V[F] = 0;
-//                printf("REG [I]: %d\n", memory.I - 512);
+                printf("\tREG [I]: %X\n", memory.progSpace[memory.I]);
                 for(i = 0; i < N; i++){
-                    y+=i;
-                    if(y < 64){
+                    if(posY < 32){
+                    printf("\t\tSprite #%d\n", i);
                     for(k = 0; k < 8; k++){
-                        x+=k;
-                        if(x < 64){
+                        if(posX < 64){
                             if (((memory.progSpace[memory.I + i]) << k) & 0b10000000){
-                                if (screen[x * y] == '0'){
-                                    screen[x * y] = ' ';
+                                   // printf("\t\t\tPixel #%d => ", k);
+                                    //printf("(x, y) = (%d, %d)\n", posX, posY);
+                                    //printf("(w, h) = (%d, %d)\n", r[posX][posY].w , r[posX][posY].h);
+                                if (surfRect[posX][posY] == NULL){
+                                    
+                                    surfRect[posX][posY] = SDL_CreateRGBSurface(SDL_HWSURFACE, 20, 20, 32, 0, 0, 0, 0);    
+                                    pixel.x = 1280/64 * posX;
+                                    pixel.y = 640/32 * posY;    
+
+                                    SDL_FillRect(surfRect[posX][posY], NULL, SDL_MapRGB(window->format, 255,255,255));
+                                    SDL_BlitSurface(surfRect[posX][posY], NULL, window, &pixel);  
+
+                                    printf("(w, h) = (%d, %d)\n", surfRect[posX][posY]->w , surfRect[posX][posY]->h);
                                     memory.V[F] = 1;
                                 }
                                 else{
-                                    screen[x * y] = '0';
+                                    surfRect[posX][posY] = NULL;
                                 }
                             }
+                            posX++;
                         }
                 }
                 }
+                posY++;
+                posX = memory.V[x] % 64;
+                //printf("\t\t (x, y) = (%d, %d)\n", x, y);
             }
+            printf("\n");
             memory.PC += 2;
+            break;
+            case 0xF:
+                switch(instructionSplit[3]){
+                    case 0x7: //LD Vx, DT
+                        memory.V[x] = memory.DT;
+                        memory.PC += 2;
+                        break;
+                    case 0xA: //LD Vx, K
+                        memory.PC += 2;
+                        break;
+                    case 0x8: //LD ST, Vx
+                        memory.ST = memory.V[x];
+                        memory.PC += 2;
+                        break;
+                    case 0xE: //ADD I, Vx
+                        memory.I += memory.V[x];
+                        memory.PC += 2;
+                        break;
+                    case 0x9:
+                        memory.I = memory.V[x] * 0x5;
+                        memory.PC += 2;
+                        break;
+                    case 0x3:
+                        memory.progSpace[memory.I] = memory.V[x] / 100;
+                        memory.progSpace[memory.I + 1] = (memory.V[x] / 10) % 10;
+                        memory.progSpace[memory.I + 2] = (memory.V[x] % 100) % 10;	
+                        memory.PC += 2;
+                        break;
+                    case 0x5:
+                        switch (y)
+                        {
+                        case 0x1: //LD DT, Vx
+                            memory.DT = memory.V[x];
+                            memory.PC += 2;
+                            break;
+                        case 0x5:
+                            for(i = 0; i < x; i++){
+                                memory.progSpace[memory.I + i] = memory.V[i];
+                            }
+
+                            memory.PC += 2;
+                            break;
+                        case 0x6:
+                            for(i = 0; i < x; i++){
+                                memory.progSpace[memory.I + i] = memory.V[i];
+                            }
+
+                            memory.PC += 2;
+                        
+                            break;
+                        }
+                    break;
+                }
             break;
 
             default:
                 memory.PC += 2;
-      //  sleep(1);
 
             }   
-
-        for(i = 0; i < 64*32; i++){
-            printf("%c", screen[i]);
-
-            if((i + 1) % 64 == 0){
-                printf("\n");
-            }
+        //sleep(1);
+        }
+        /*
+    for(y = 0; y < 32; y++){
+        for(x = 0; x < 64; x++){
+            printf("(%d, %d)\n", pixel.x, pixel.y);
+            SDL_BlitSurface(surfRect[x][y], NULL, window, &pixel);         
         }
     }
+*/
+        printf("\n");
+        SDL_Flip(window);
     }
+    
+
     free(dump);
+   SDL_Quit();
     return EXIT_SUCCESS;
 }
