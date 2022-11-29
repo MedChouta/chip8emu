@@ -28,6 +28,6 @@ struct Memory {
     uint16_t stack[STACKSIZE];
 };
 
-uint8_t *splitBytes(uint16_t instruction);
+uint16_t pop(uint16_t stack[]);
 
 #endif
